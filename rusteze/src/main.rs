@@ -24,17 +24,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // initialize the environment
     init_env(&app_config);
 
-    // print the host:port 
+    // print the host:port
     println!("server will run on {}:{}", app_config.host, app_config.port);
 
     // create and start the API server
     let api_server = api::APIServer {};
-    let addr = format!("{}:{}", app_config.host, app_config.port).parse().map_err(|e| {
-        eprintln!("failed to parse server address: {}", e);
-        std::process::exit(1);
-    }).unwrap();
-    
-    tokio::runtime::Builder::new_multi_thread()
+    let addr = format!("{}:{}", app_config.host, app_config.port)
+        .parse()
+        .map_err(|e| {
+            eprintln!("failed to parse server address: {}", e);
+            std::process::exit(1);
+        })
+        .unwrap();
+
+    tokio::runtime::Builder
+        ::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|e| {

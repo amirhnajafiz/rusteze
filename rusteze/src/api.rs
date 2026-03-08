@@ -1,12 +1,8 @@
-use axum::{
-    extract::Query,
-    routing::{get, post},
-    Json, Router,
-};
+use axum::{ extract::Query, extract::Json, routing::{ get, post }, Router };
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 
-use crate::requests::{GetKeyRequest, GetKeyResponse, SetKeyRequest, SetKeyResponse};
+use crate::requests::{ GetKeyRequest, GetKeyResponse, SetKeyRequest, SetKeyResponse };
 
 pub struct APIServer {}
 

@@ -1,4 +1,4 @@
-use config::{Config, Environment, File, ConfigError};
+use config::{ Config, Environment, File, ConfigError };
 use serde::Deserialize;
 
 // Prefix for environment variables.

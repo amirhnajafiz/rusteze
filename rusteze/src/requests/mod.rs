@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{ Deserialize, Serialize };
 
 // Define request and response structures for the API endpoints.
 
