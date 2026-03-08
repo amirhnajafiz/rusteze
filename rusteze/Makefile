@@ -1,12 +1,15 @@
 CC ?= cargo
 
-.PHONY: build release
+.PHONY: build check release
 
 build:
 	cargo build
 
+check:
+	cargo check
+
 release:
-	carge build --release
+	cargo build --release
 
 cleanup:
 	rm -rf target/
