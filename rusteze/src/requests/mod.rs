@@ -7,12 +7,14 @@ use serde::{ Deserialize, Serialize };
 pub struct SetKeyRequest {
     pub key: String,
     pub value: String,
+    pub ttl_seconds: Option<u64>,
 }
 
 // SetKeyResponse represents the response for the set key operation.
 #[derive(Deserialize, Serialize, Debug)]
 pub struct SetKeyResponse {
     pub success: bool,
+    pub time_to_live: Option<u64>,
 }
 
 // GetKeyResponse represents the response for the get key operation.
