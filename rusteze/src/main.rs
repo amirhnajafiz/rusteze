@@ -2,6 +2,7 @@ mod api;
 mod configs;
 mod memcache;
 mod requests;
+mod worker;
 
 // init_env function to initialize the environment, such as creating necessary directories.
 fn init_env(config: &configs::AppConfig) {
@@ -31,12 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // start the cleanup task to remove expired keys every minute
     let mem_cache_clone = mem_cache.clone();
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
-        loop {
-            interval.tick().await;
-            let mut cache = mem_cache_clone.lock().await;
-            cache.cleanup();
-        }
+        worker::worker_memcache_cleanup(60, mem_cache_clone).await;
     });
 
     // print the host:port
@@ -54,6 +50,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .unwrap();
 
+    // Build the Tokio runtime and start the API server.
     tokio::runtime::Builder
         ::new_multi_thread()
         .enable_all()
