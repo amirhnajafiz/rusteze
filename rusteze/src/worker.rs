@@ -11,5 +11,6 @@ pub async fn worker_memcache_cleanup(seconds: u64, memcache: Arc<Mutex<MemCache>
         interval.tick().await;
         let mut cache = memcache.lock().await;
         cache.cleanup();
+        print!("{} expired keys cleaned up from memcache\n", seconds);
     }
 }

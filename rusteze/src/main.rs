@@ -13,7 +13,8 @@ fn init_env(config: &configs::AppConfig) {
     });
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // load the configuration
     let app_config = match configs::load_config("config.yaml") {
         Ok(app_config) => app_config,
@@ -50,16 +51,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .unwrap();
 
-    // Build the Tokio runtime and start the API server.
-    tokio::runtime::Builder
-        ::new_multi_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| {
-            eprintln!("failed to create Tokio runtime: {}", e);
-            std::process::exit(1);
-        })
-        .unwrap()
-        .block_on(api_server.start(addr));
+    api_server.start(addr).await;
     Ok(())
 }
