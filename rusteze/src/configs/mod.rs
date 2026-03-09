@@ -13,6 +13,7 @@ pub struct AppConfig {
     pub log_level: String,
     pub data_dir: String,
     pub metrics_port: u16,
+    pub cleanup_interval: u64,
     pub snapshot_interval: u64,
 }
 
@@ -25,6 +26,7 @@ impl Default for AppConfig {
             data_dir: "./data".to_string(),
             port: 8080,
             metrics_port: 9090,
+            cleanup_interval: 60, // 1 minute
             snapshot_interval: 300, // 5 minutes
         }
     }

@@ -36,10 +36,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // create the memcache instance to be shared across the API handlers
     let mem_cache = std::sync::Arc::new(tokio::sync::Mutex::new(memcache::MemCache::new()));
 
-    // start the cleanup task to remove expired keys every minute
-    let mem_cache_clone = mem_cache.clone();
+    // start the cleanup task to remove expired keys
+    let mem_cache_for_cleanup = mem_cache.clone();
     tokio::spawn(async move {
-        worker::worker_memcache_cleanup(60, mem_cache_clone).await;
+        worker::worker_memcache_cleanup(app_config.cleanup_interval, mem_cache_for_cleanup).await;
+    });
+
+    // start the snapshot task to save the cache state
+    let mem_cache_for_snapshot = mem_cache.clone();
+    let data_dir_for_snapshot = app_config.data_dir.clone();
+    tokio::spawn(async move {
+        worker::worker_snapshot(app_config.snapshot_interval, data_dir_for_snapshot, mem_cache_for_snapshot).await;
     });
 
     // print the host:port

@@ -61,4 +61,9 @@ impl MemCache {
             self.ttl.remove(&key);
         }
     }
+
+    // Export the current state of the cache as a HashMap. This can be useful for debugging or testing purposes.
+    pub fn export_cache(&self) -> std::collections::HashMap<String, String> {
+        self.cache.clone()
+    }
 }
