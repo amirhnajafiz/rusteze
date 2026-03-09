@@ -1,6 +1,7 @@
 use axum::{ extract::{Json, Query, State}, routing::{ get, post }, Router };
 use std::{net::SocketAddr, sync::Arc};
 use tokio::{net::TcpListener, sync::Mutex};
+use tracing::{ info, error};
 
 use crate::memcache::MemCache;
 use crate::requests::{ GetKeyRequest, GetKeyResponse, SetKeyRequest, SetKeyResponse };
@@ -18,8 +19,11 @@ impl APIServer {
     ) -> Json<SetKeyResponse> {
         // validate the input (key and value should not be empty)
         if payload.key.is_empty() || payload.value.is_empty() {
+            error!("invalid input: key and value must not be empty");
             return Json(SetKeyResponse { success: false, time_to_live: None });
         }
+
+        info!("key `{}` set successfully with TTL: {:?}", payload.key, payload.ttl_seconds);
 
         // set the key-value pair in the cache with the specified TTL
         let mut cache = mem_cache.lock().await;

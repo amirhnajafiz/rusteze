@@ -1,14 +1,20 @@
 mod api;
 mod configs;
+mod logger;
 mod memcache;
 mod requests;
 mod worker;
 
+use tracing::{ info, error };
+
 // init_env function to initialize the environment, such as creating necessary directories.
 fn init_env(config: &configs::AppConfig) {
+    // initialize the logger with the specified log level
+    logger::init_logger(&config.log_level);
+
     // create the data directory if it doesn't exist
     std::fs::create_dir_all(&config.data_dir).unwrap_or_else(|e| {
-        eprintln!("failed to create data directory: {}", e);
+        error!("failed to create data directory: {}", e);
         std::process::exit(1);
     });
 }
@@ -19,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_config = match configs::load_config("config.yaml") {
         Ok(app_config) => app_config,
         Err(e) => {
-            eprintln!("failed to load configuration: {}", e);
+            error!("failed to load configuration: {}", e);
             std::process::exit(1);
         }
     };
@@ -37,16 +43,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // print the host:port
-    println!("server will run on {}:{}", app_config.host, app_config.port);
+    info!("server running on {}:{}", app_config.host, app_config.port);
 
     // create and start the API server
-    let api_server = api::APIServer{
+    let api_server = api::APIServer {
         mem_cache: mem_cache.clone(),
     };
     let addr = format!("{}:{}", app_config.host, app_config.port)
         .parse()
         .map_err(|e| {
-            eprintln!("failed to parse server address: {}", e);
+            error!("failed to parse server address: {}", e);
             std::process::exit(1);
         })
         .unwrap();
