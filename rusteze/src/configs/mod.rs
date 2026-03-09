@@ -27,7 +27,7 @@ impl Default for AppConfig {
             port: 8080,
             metrics_port: 9090,
             cleanup_interval: 60, // 1 minute
-            snapshot_interval: 10, // 5 minutes
+            snapshot_interval: 300, // 5 minutes
         }
     }
 }
