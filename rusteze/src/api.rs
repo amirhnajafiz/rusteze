@@ -16,8 +16,16 @@ impl APIServer {
         State(mem_cache): State<Arc<Mutex<MemCache>>>,
         Json(payload): Json<SetKeyRequest>,
     ) -> Json<SetKeyResponse> {
+        // validate the input (key and value should not be empty)
+        if payload.key.is_empty() || payload.value.is_empty() {
+            return Json(SetKeyResponse { success: false, time_to_live: None });
+        }
+
+        // set the key-value pair in the cache with the specified TTL
         let mut cache = mem_cache.lock().await;
         cache.set(payload.key, payload.value, payload.ttl_seconds);
+
+        // return a success response with the TTL information
         Json(SetKeyResponse { success: true, time_to_live: payload.ttl_seconds })
     }
 
@@ -39,6 +47,8 @@ impl APIServer {
         let app = Router::new()
             .route("/api/set", post(Self::http_handler_set_key))
             .route("/api/get", get(Self::http_handler_get_key))
+            .route("/health", get(|| async { "OK" }))
+            .route("/ready", get(|| async { "OK" }))
             .with_state(self.mem_cache.clone());
 
         let listener = TcpListener::bind(&addr).await.unwrap();
