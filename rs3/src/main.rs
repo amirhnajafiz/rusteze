@@ -1,8 +1,10 @@
 // main.rs
 
-use std::io::Write;
-use std::net::{Shutdown, TcpListener};
-use std::process;
+use std::{
+    io::{BufReader, Write, prelude::*},
+    net::{Shutdown, TcpListener, TcpStream},
+    process,
+};
 
 fn main() {
     // server address (TODO: read from a config file / argument flag)
@@ -21,7 +23,7 @@ fn main() {
 
     // loop over the router for incoming traffic
     for stream in router.incoming() {
-        let mut stream = match stream {
+        let stream = match stream {
             Ok(s) => s,
             Err(error) => {
                 eprintln!("failed to accept connection: {}", error);
@@ -29,10 +31,27 @@ fn main() {
             }
         };
 
-        let in_addr = stream.peer_addr().unwrap();
-        println!("connection established: {}", in_addr);
-
-        stream.write(b"hello client").unwrap();
-        stream.shutdown(Shutdown::Both).unwrap();
+        handler(stream);
     }
+}
+
+fn handler(mut stream: TcpStream) {
+    // extract the input connection address
+    let in_addr = stream.peer_addr().unwrap();
+    println!("connection established: {}", in_addr);
+
+    // get the request content
+    let buffer = BufReader::new(&stream);
+    let request: Vec<_> = buffer
+        .lines()
+        .map(|line| line.unwrap())
+        .take_while(|line| !line.is_empty())
+        .collect();
+
+    // this line should print http request content
+    println!("request captured: {:#?}", request);
+
+    // write into the stream and close it
+    stream.write(b"hello client").unwrap();
+    stream.shutdown(Shutdown::Both).unwrap();
 }
