@@ -1,6 +1,7 @@
 // main.rs
 
 use std::{
+    fs,
     io::{BufReader, Write, prelude::*},
     net::{Shutdown, TcpListener, TcpStream},
     process,
@@ -48,11 +49,16 @@ fn handler(mut stream: TcpStream) {
         .take_while(|line| !line.is_empty())
         .collect();
 
-    // this line should print http request content
+    // this line should print the HTTP request content
     println!("request captured: {:#?}", request);
 
+    // create an HTTP response
+    let status_line = "HTTP/1.1 200 OK";
+    let content = fs::read_to_string("index.html").unwrap();
+    let length = content.len();
+    let response = format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{content}");
+
     // write into the stream and close it
-    let response = "HTTP/1.1 200 OK\r\n\r\n";
     stream.write_all(response.as_bytes()).unwrap();
     stream.shutdown(Shutdown::Both).unwrap();
 }
