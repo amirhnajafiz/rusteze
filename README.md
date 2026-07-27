@@ -1,23 +1,6 @@
-# Rusteze
+# RS3
 
-Fast and memory safe key-value storage in Rust.
+Rust based S3 system. Uploading and downloading files from a single Rust webserver.
 
-## Features
+Web example. Take files from HTTP, stream them into local file systems. Dump metadata into a local memory map.
 
-- HTTP API
-  - POST : Set [key, value, expire date]
-  - GET : Get [key]
-  - GET : Stats
-- Prometheus metrics
-- Jaeger tracer
-- Zap logger
-- Snapshot system (storing cache data from memory to disk)
-
-## Configs
-
-- HTTP port
-- Metrics port
-- Log level
-- Snapshot enable
-- Data directory
-- Jaeger tracing

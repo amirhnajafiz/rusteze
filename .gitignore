@@ -18,5 +18,8 @@ data/
 # Dependency directories (remove the comment below to include it)
 vendor/
 
+# Custome
 .idea/
+.vscode/
 .DS_Store
+
