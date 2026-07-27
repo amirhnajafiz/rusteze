@@ -1,5 +1,6 @@
 // main.rs
 
+use clap::Parser;
 use std::{
     fs,
     io::{BufReader, Write, prelude::*},
@@ -7,9 +8,24 @@ use std::{
     process,
 };
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Server IP
+    #[arg(long)]
+    host: String,
+
+    /// Server port
+    #[arg(long, default_value_t = 1)]
+    port: i32,
+}
+
 fn main() {
-    // server address (TODO: read from a config file / argument flag)
-    let address = "127.0.0.1:8080";
+    // parse args
+    let args = Args::parse();
+
+    // server address
+    let address = &format!("{}:{}", args.host, args.port);
 
     // create a TCP router, exit if it fails
     let router = match TcpListener::bind::<&str>(address) {
