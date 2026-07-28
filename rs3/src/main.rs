@@ -67,18 +67,20 @@ fn handler(mut stream: TcpStream) {
 
     // get the request content
     let buffer = BufReader::new(&stream);
-    let request: Vec<_> = buffer
-        .lines()
-        .map(|line| line.unwrap())
-        .take_while(|line| !line.is_empty())
-        .collect();
+    let request_line = buffer.lines().next().unwrap().unwrap();
 
     // this line should print the HTTP request content
-    info!("{:#?}", request);
+    info!(request = request_line, "request");
+
+    // routing logic
+    let (status_line, content_path) = if request_line == "GET / HTTP/1.1" {
+        ("HTTP/1.1 200 OK", "index.html")
+    } else {
+        ("HTTP/1.1 404 NOT FOUND", "404.html")
+    };
 
     // create an HTTP response
-    let status_line = "HTTP/1.1 200 OK";
-    let content = fs::read_to_string("index.html").unwrap();
+    let content = fs::read_to_string(content_path).unwrap();
     let length = content.len();
     let response = format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{content}");
 
