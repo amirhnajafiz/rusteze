@@ -7,20 +7,27 @@ use std::{
     net::{Shutdown, TcpListener, TcpStream},
     process,
 };
+use tracing::{error, info, instrument, warn};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
     /// Server IP
-    #[arg(long)]
+    #[arg(long, default_value_t = String::from("127.0.0.1"))]
     host: String,
 
     /// Server port
-    #[arg(long, default_value_t = 1)]
+    #[arg(long, default_value_t = 8080)]
     port: i32,
 }
 
 fn main() {
+    // start log tracer (JSON logging)
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .json()
+        .init();
+
     // parse args
     let args = Args::parse();
 
@@ -31,19 +38,19 @@ fn main() {
     let router = match TcpListener::bind::<&str>(address) {
         Ok(listener) => listener,
         Err(error) => {
-            eprintln!("failed to build router: {}", error);
+            error!(error = error.to_string(), "failed to build router");
             process::exit(1);
         }
     };
 
-    println!("tpc server start: {} ...", address);
+    info!(host = args.host, port = args.port, "server start");
 
     // loop over the router for incoming traffic
     for stream in router.incoming() {
         let stream = match stream {
             Ok(s) => s,
             Err(error) => {
-                eprintln!("failed to accept connection: {}", error);
+                warn!(error = error.to_string(), "failed to accept connection");
                 continue;
             }
         };
@@ -52,10 +59,11 @@ fn main() {
     }
 }
 
+#[instrument(skip_all)]
 fn handler(mut stream: TcpStream) {
     // extract the input connection address
     let in_addr = stream.peer_addr().unwrap();
-    println!("connection established: {}", in_addr);
+    info!(addr = in_addr.to_string(), "connection established");
 
     // get the request content
     let buffer = BufReader::new(&stream);
@@ -66,7 +74,7 @@ fn handler(mut stream: TcpStream) {
         .collect();
 
     // this line should print the HTTP request content
-    println!("request captured: {:#?}", request);
+    info!("{:#?}", request);
 
     // create an HTTP response
     let status_line = "HTTP/1.1 200 OK";
