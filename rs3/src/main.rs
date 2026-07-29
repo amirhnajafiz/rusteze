@@ -1,10 +1,11 @@
 // main.rs
 
+use anyhow::Result;
 use clap::Parser;
 use std::{
     collections::HashMap,
     fs,
-    io::{BufReader, Write, prelude::*},
+    io::{self, BufReader, ErrorKind, Write, prelude::*},
     net::{Shutdown, TcpListener, TcpStream},
     path::{Path, PathBuf},
     process,
@@ -84,29 +85,59 @@ fn main() {
 
 #[instrument(skip_all)]
 fn handler(mut stream: TcpStream, templates: &HashMap<&str, PathBuf>) {
-    // extract the input connection address
-    let in_addr = stream.peer_addr().unwrap();
-    info!(addr = in_addr.to_string(), "connection established");
+    let result = (|| -> Result<()> {
+        // extract the input connection address
+        let in_addr = stream.peer_addr()?;
+        info!(addr = in_addr.to_string(), "connection established");
 
-    // get the request content
-    let buffer = BufReader::new(&stream);
-    let request_line = buffer.lines().next().unwrap().unwrap();
+        // get the request content
+        let request = {
+            let buffer = BufReader::new(&stream);
+            let mut lines = buffer.lines();
 
-    // this line should print the HTTP request content
-    info!(request = request_line, "request");
+            match lines.next() {
+                Some(line) => line?,
+                None => {
+                    return Err(anyhow::Error::new(io::Error::new(
+                        ErrorKind::UnexpectedEof,
+                        "empty request",
+                    )));
+                }
+            }
+        };
 
-    // routing logic
-    let (status_line, content_path) = match &request_line[..] {
-        "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", templates["index"].display()),
-        _ => ("HTTP/1.1 404 NOT FOUND", templates["404"].display()),
-    };
+        // this line should print the HTTP request content
+        info!(request = request, "request");
 
-    // create an HTTP response
-    let content = fs::read_to_string(content_path.to_string()).unwrap();
-    let length = content.len();
-    let response = format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{content}");
+        // routing logic
+        let (status_line, content_path) = match request.as_str() {
+            "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", templates["index"].display()),
+            _ => ("HTTP/1.1 404 NOT FOUND", templates["404"].display()),
+        };
+
+        // create an HTTP response
+        let content = fs::read_to_string(content_path.to_string())?;
+        let length = content.len();
+        let response = format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{content}");
+
+        // write into the stream and close it
+        stream.write_all(response.as_bytes()).unwrap();
+
+        Ok(())
+    })();
+
+    // handle internal errors
+    if let Err(err) = result {
+        error!(error = %err, "request failed");
+        let _ = stream.write_all(
+            b"HTTP/1.1 500 Internal Server Error\r\n\
+              Content-Length: 0\r\n\
+              Connection: close\r\n\r\n",
+        );
+    }
 
     // write into the stream and close it
-    stream.write_all(response.as_bytes()).unwrap();
-    stream.shutdown(Shutdown::Both).unwrap();
+    if let Err(err) = stream.shutdown(Shutdown::Both) {
+        warn!(error = %err, "failed to shutdown connection");
+    }
 }

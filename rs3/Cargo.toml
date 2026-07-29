@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.104"
 clap = { version = "4.6.4", features = ["derive"] }
 threadpool = "1.8.1"
 tracing = "0.1.44"
