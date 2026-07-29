@@ -2,12 +2,17 @@
 
 use clap::Parser;
 use std::{
+    collections::HashMap,
     fs,
     io::{BufReader, Write, prelude::*},
     net::{Shutdown, TcpListener, TcpStream},
+    path::{Path, PathBuf},
     process,
 };
 use tracing::{error, info, instrument, warn};
+
+// directory of templates
+const TEMP_DIR: &str = "templates/";
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -43,6 +48,13 @@ fn main() {
         }
     };
 
+    // build the templates path
+    let path = Path::new(".").join(TEMP_DIR);
+    let mut templates: HashMap<&str, PathBuf> = HashMap::new();
+
+    templates.insert("index", path.join("index.html"));
+    templates.insert("404", path.join("404.html"));
+
     info!(host = args.host, port = args.port, "server start");
 
     // loop over the router for incoming traffic
@@ -55,12 +67,12 @@ fn main() {
             }
         };
 
-        handler(stream);
+        handler(stream, &templates);
     }
 }
 
 #[instrument(skip_all)]
-fn handler(mut stream: TcpStream) {
+fn handler(mut stream: TcpStream, templates: &HashMap<&str, PathBuf>) {
     // extract the input connection address
     let in_addr = stream.peer_addr().unwrap();
     info!(addr = in_addr.to_string(), "connection established");
@@ -74,13 +86,13 @@ fn handler(mut stream: TcpStream) {
 
     // routing logic
     let (status_line, content_path) = if request_line == "GET / HTTP/1.1" {
-        ("HTTP/1.1 200 OK", "index.html")
+        ("HTTP/1.1 200 OK", templates["index"].display())
     } else {
-        ("HTTP/1.1 404 NOT FOUND", "404.html")
+        ("HTTP/1.1 404 NOT FOUND", templates["404"].display())
     };
 
     // create an HTTP response
-    let content = fs::read_to_string(content_path).unwrap();
+    let content = fs::read_to_string(content_path.to_string()).unwrap();
     let length = content.len();
     let response = format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{content}");
 
