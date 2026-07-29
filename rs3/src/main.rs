@@ -1,5 +1,7 @@
 // main.rs
 
+mod workers;
+
 use anyhow::Result;
 use clap::Parser;
 use std::{
@@ -11,8 +13,8 @@ use std::{
     process,
     sync::Arc,
 };
-use threadpool::ThreadPool;
 use tracing::{error, info, instrument, warn};
+use workers::WorkerPool;
 
 // directory of templates
 const TEMP_DIR: &str = "templates/";
@@ -52,7 +54,7 @@ fn main() {
     };
 
     // create a thread pool
-    let pool = ThreadPool::new(4);
+    let pool = WorkerPool::new(4);
 
     // build the templates path
     let path = Path::new(".").join(TEMP_DIR);
