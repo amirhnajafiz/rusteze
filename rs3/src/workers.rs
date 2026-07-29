@@ -1,8 +1,9 @@
 // workers.rs
 
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
-use tracing::info;
+use tracing::{error, info};
 
 /// Job is a executable function that returns at once wrapped inside a box.
 type Job = Box<dyn FnOnce() + Send + 'static>;
@@ -72,7 +73,9 @@ impl Worker {
 
                 match message {
                     Ok(job) => {
-                        job();
+                        if catch_unwind(AssertUnwindSafe(job)).is_err() {
+                            error!(id = id, "job panicked, recovering");
+                        }
                     }
                     Err(_) => {
                         info!(id = id, "shutdown");

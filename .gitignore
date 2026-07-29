@@ -22,4 +22,4 @@ vendor/
 .idea/
 .vscode/
 .DS_Store
-
+logs/

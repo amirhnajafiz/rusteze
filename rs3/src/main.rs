@@ -12,9 +12,13 @@ use std::{
     path::{Path, PathBuf},
     process,
     sync::Arc,
+    time::Duration,
 };
 use tracing::{error, info, instrument, warn};
+use tracing_subscriber::fmt;
 use workers::WorkerPool;
+
+const IO_TIMEOUT: Duration = Duration::from_secs(10);
 
 // directory of templates
 const TEMP_DIR: &str = "templates/";
@@ -32,8 +36,15 @@ struct Args {
 }
 
 fn main() {
+    // create a rolling file appender
+    let file_appender = tracing_appender::rolling::daily("logs", "app.log");
+
+    // wrap it ina non-blocking writer
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
     // start log tracer (JSON logging)
-    tracing_subscriber::fmt()
+    fmt()
+        .with_writer(non_blocking)
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .json()
         .init();
@@ -87,6 +98,14 @@ fn main() {
 
 #[instrument(skip_all)]
 fn handler(mut stream: TcpStream, templates: &HashMap<&str, PathBuf>) {
+    // a dead client must never be able to block a worker thread indefinitely
+    if let Err(err) = stream.set_read_timeout(Some(IO_TIMEOUT)) {
+        warn!(error = %err, "failed to set read timeout");
+    }
+    if let Err(err) = stream.set_write_timeout(Some(IO_TIMEOUT)) {
+        warn!(error = %err, "failed to set write timeout");
+    }
+
     let result = (|| -> Result<()> {
         // extract the input connection address
         let in_addr = stream.peer_addr()?;
@@ -120,10 +139,18 @@ fn handler(mut stream: TcpStream, templates: &HashMap<&str, PathBuf>) {
         // create an HTTP response
         let content = fs::read_to_string(content_path.to_string())?;
         let length = content.len();
-        let response = format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{content}");
+        let response = format!(
+            "{status_line}\r\n\
+             Content-Type: text/html; charset=utf-8\r\n\
+             Content-Length: {length}\r\n\
+             Connection: close\r\n\
+             \r\n\
+             {content}"
+        );
 
         // write into the stream and close it
         stream.write_all(response.as_bytes()).unwrap();
+        stream.flush().unwrap();
 
         Ok(())
     })();
@@ -139,7 +166,7 @@ fn handler(mut stream: TcpStream, templates: &HashMap<&str, PathBuf>) {
     }
 
     // write into the stream and close it
-    if let Err(err) = stream.shutdown(Shutdown::Both) {
+    if let Err(err) = stream.shutdown(Shutdown::Write) {
         warn!(error = %err, "failed to shutdown connection");
     }
 }
