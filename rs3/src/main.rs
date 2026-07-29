@@ -8,7 +8,9 @@ use std::{
     net::{Shutdown, TcpListener, TcpStream},
     path::{Path, PathBuf},
     process,
+    sync::Arc,
 };
+use threadpool::ThreadPool;
 use tracing::{error, info, instrument, warn};
 
 // directory of templates
@@ -48,12 +50,18 @@ fn main() {
         }
     };
 
+    // create a thread pool
+    let pool = ThreadPool::new(4);
+
     // build the templates path
     let path = Path::new(".").join(TEMP_DIR);
     let mut templates: HashMap<&str, PathBuf> = HashMap::new();
 
     templates.insert("index", path.join("index.html"));
     templates.insert("404", path.join("404.html"));
+
+    // shadow templates for read-only
+    let templates = Arc::new(templates);
 
     info!(host = args.host, port = args.port, "server start");
 
@@ -67,7 +75,10 @@ fn main() {
             }
         };
 
-        handler(stream, &templates);
+        let templates_clone = templates.clone();
+        pool.execute(move || {
+            handler(stream, &templates_clone);
+        });
     }
 }
 
@@ -85,10 +96,9 @@ fn handler(mut stream: TcpStream, templates: &HashMap<&str, PathBuf>) {
     info!(request = request_line, "request");
 
     // routing logic
-    let (status_line, content_path) = if request_line == "GET / HTTP/1.1" {
-        ("HTTP/1.1 200 OK", templates["index"].display())
-    } else {
-        ("HTTP/1.1 404 NOT FOUND", templates["404"].display())
+    let (status_line, content_path) = match &request_line[..] {
+        "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", templates["index"].display()),
+        _ => ("HTTP/1.1 404 NOT FOUND", templates["404"].display()),
     };
 
     // create an HTTP response
