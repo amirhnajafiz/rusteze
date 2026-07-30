@@ -1,11 +1,16 @@
 // workers.rs
 
-use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::{Arc, Mutex, mpsc};
-use std::thread;
-use tracing::{error, info};
+use std::{
+    panic::{AssertUnwindSafe, catch_unwind},
+    sync::{Arc, Mutex, mpsc},
+    thread,
+};
+use tracing::{error, info, instrument};
 
-/// Job is a executable function that returns at once wrapped inside a box.
+/// Job is a one time executable function that takes nothing,
+/// returns nothing, and doesn't borrow any static data.
+/// Safe to be transferred to another thread.
+/// Allocated on heap.
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
 /// WorkerPool coordinates the threads running in the background
@@ -17,6 +22,7 @@ pub struct WorkerPool {
 
 impl WorkerPool {
     /// new returns a pool of worker threads running in the background.
+    #[instrument(skip_all)]
     pub fn new(size: usize) -> WorkerPool {
         // must have minimum one handler
         assert!(size > 0);
@@ -31,6 +37,7 @@ impl WorkerPool {
         let mut workers = Vec::with_capacity(size);
         for id in 0..size {
             // spawn worker threads
+            info!(id = id, "starting worker");
             workers.push(Worker::new(id, Arc::clone(&receiver)));
         }
 
@@ -42,6 +49,7 @@ impl WorkerPool {
     where
         F: FnOnce() + Send + 'static,
     {
+        // allocate in heap and send over the channel
         let job = Box::new(f);
         self.sender.send(job).unwrap();
     }
@@ -49,6 +57,7 @@ impl WorkerPool {
 
 /// Implementing Drop Train on WorkerPool.
 impl Drop for WorkerPool {
+    #[instrument(skip_all)]
     fn drop(&mut self) {
         for worker in self.workers.drain(..) {
             info!(id = worker.id, "shutting down worker");
@@ -66,13 +75,17 @@ struct Worker {
 impl Worker {
     /// new starts a worker thread in background that waits on a channel to pick
     /// Job instances.
+    #[instrument(skip_all)]
     fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
         let thread = thread::spawn(move || {
-            loop {
-                let message = receiver.lock().unwrap().recv();
+            info!(id = id, "start");
 
-                match message {
+            loop {
+                // receive events from the sender channel
+                let event = receiver.lock().unwrap().recv();
+                match event {
                     Ok(job) => {
+                        // execute job and catch unexpected errors
                         if catch_unwind(AssertUnwindSafe(job)).is_err() {
                             error!(id = id, "job panicked, recovering");
                         }

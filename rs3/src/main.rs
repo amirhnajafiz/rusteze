@@ -1,5 +1,6 @@
 // main.rs
 
+mod loger;
 mod workers;
 
 use anyhow::Result;
@@ -15,7 +16,6 @@ use std::{
     time::Duration,
 };
 use tracing::{error, info, instrument, warn};
-use tracing_subscriber::fmt;
 use workers::WorkerPool;
 
 const IO_TIMEOUT: Duration = Duration::from_secs(10);
@@ -36,18 +36,8 @@ struct Args {
 }
 
 fn main() {
-    // create a rolling file appender
-    let file_appender = tracing_appender::rolling::daily("logs", "app.log");
-
-    // wrap it ina non-blocking writer
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-
-    // start log tracer (JSON logging)
-    fmt()
-        .with_writer(non_blocking)
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .json()
-        .init();
+    // init logger (must keep the guard for file writer)
+    let _guard = loger::init_logger();
 
     // parse args
     let args = Args::parse();
