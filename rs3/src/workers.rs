@@ -17,7 +17,7 @@ type Job = Box<dyn FnOnce() + Send + 'static>;
 /// for handling input requests.
 pub struct WorkerPool {
     workers: Vec<Worker>,
-    sender: mpsc::Sender<Job>,
+    sender: Option<mpsc::Sender<Job>>,
 }
 
 impl WorkerPool {
@@ -41,7 +41,10 @@ impl WorkerPool {
             workers.push(Worker::new(id, Arc::clone(&receiver)));
         }
 
-        WorkerPool { workers, sender }
+        WorkerPool {
+            workers,
+            sender: Some(sender),
+        }
     }
 
     /// execute accepts an instance of Job type and sends it over a channel.
@@ -51,7 +54,7 @@ impl WorkerPool {
     {
         // allocate in heap and send over the channel
         let job = Box::new(f);
-        self.sender.send(job).unwrap();
+        self.sender.as_ref().unwrap().send(job).unwrap();
     }
 }
 
@@ -59,9 +62,15 @@ impl WorkerPool {
 impl Drop for WorkerPool {
     #[instrument(skip_all)]
     fn drop(&mut self) {
+        // close sender channel
+        drop(self.sender.take());
+
+        // stop the workers
         for worker in self.workers.drain(..) {
             info!(id = worker.id, "shutting down worker");
-            worker.thread.join().unwrap();
+            if worker.thread.join().is_err() {
+                error!(id = worker.id, "worker panicked");
+            }
         }
     }
 }
