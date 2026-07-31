@@ -1,16 +1,17 @@
 // http.rs
 
 use crate::workers::WorkerPool;
-use ::std::{
+use anyhow::Result;
+use std::{
     collections::HashMap,
     fs,
     io::{self, BufReader, ErrorKind, Write, prelude::*},
     net::{Shutdown, TcpListener, TcpStream},
+    num::NonZeroUsize,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
-use anyhow::Result;
 use tracing::{error, info, instrument, warn};
 
 // directory of templates
@@ -21,13 +22,14 @@ const IO_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// HTTPHandler holds the traffic routing logic.
 pub struct HTTPHandler {
-    address: String,
+    host: String,
+    port: u16,
     templates: Arc<HashMap<String, PathBuf>>,
 }
 
 impl HTTPHandler {
     #[instrument(skip_all)]
-    pub fn new(host: &str, port: &str) -> HTTPHandler {
+    pub fn new(host: String, port: u16) -> HTTPHandler {
         // build the templates path
         let path = Path::new(".").join(TEMP_DIR);
         let mut templates: HashMap<String, PathBuf> = HashMap::new();
@@ -39,20 +41,21 @@ impl HTTPHandler {
         let templates = Arc::new(templates);
 
         HTTPHandler {
-            address: format!("{}:{}", host, port),
+            host,
+            port,
             templates,
         }
     }
 
     #[instrument(skip_all)]
     pub fn listen_and_serve(self: Arc<Self>) -> Result<()> {
-        info!(address = self.address, "server start");
+        info!(host = self.host, port = self.port, "server start");
 
         // create a TCP router, exit if it fails
-        let router = TcpListener::bind::<&str>(&self.address.to_string())?;
+        let router = TcpListener::bind((self.host.as_str(), self.port))?;
 
         // create a thread pool
-        let pool = WorkerPool::new(4);
+        let pool = WorkerPool::new(NonZeroUsize::new(4).unwrap());
 
         // loop over the router for incoming traffic
         for stream in router.incoming() {

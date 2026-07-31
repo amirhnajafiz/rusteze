@@ -17,7 +17,7 @@ struct Args {
 
     /// Server port
     #[arg(long, default_value_t = 8080)]
-    port: i32,
+    port: u16,
 }
 
 fn main() {
@@ -28,7 +28,7 @@ fn main() {
     let args = Args::parse();
 
     // create new HTTP handler
-    let hd = http::HTTPHandler::new(&args.host.to_string(), &args.port.to_string());
+    let hd = http::HTTPHandler::new(args.host, args.port);
     let hd = Arc::new(hd);
 
     // start the handler

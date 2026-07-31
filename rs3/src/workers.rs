@@ -1,6 +1,7 @@
 // workers.rs
 
 use std::{
+    num::NonZeroUsize,
     panic::{AssertUnwindSafe, catch_unwind},
     sync::{Arc, Mutex, mpsc},
     thread,
@@ -23,9 +24,8 @@ pub struct WorkerPool {
 impl WorkerPool {
     /// new returns a pool of worker threads running in the background.
     #[instrument(skip_all)]
-    pub fn new(size: usize) -> WorkerPool {
-        // must have minimum one handler
-        assert!(size > 0);
+    pub fn new(size: NonZeroUsize) -> WorkerPool {
+        let size = size.get();
 
         // create communication channel
         let (sender, receiver) = mpsc::channel();
