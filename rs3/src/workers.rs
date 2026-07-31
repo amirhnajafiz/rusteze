@@ -14,7 +14,7 @@ use tracing::{error, info, instrument};
 /// Allocated on heap.
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
-/// WorkerPool coordinates the threads running in the background
+/// `WorkerPool` coordinates the threads running in the background
 /// for handling input requests.
 pub struct WorkerPool {
     workers: Vec<Worker>,
@@ -54,11 +54,15 @@ impl WorkerPool {
     {
         // allocate in heap and send over the channel
         let job = Box::new(f);
-        self.sender.as_ref().unwrap().send(job).unwrap();
+        self.sender
+            .as_ref()
+            .expect("sender channel missing")
+            .send(job)
+            .expect("failed to send job");
     }
 }
 
-/// Implementing Drop Train on WorkerPool.
+/// Implementing Drop Train on `WorkerPool`.
 impl Drop for WorkerPool {
     #[instrument(skip_all)]
     fn drop(&mut self) {
@@ -91,18 +95,18 @@ impl Worker {
 
             loop {
                 // receive events from the sender channel
-                let event = receiver.lock().unwrap().recv();
-                match event {
-                    Ok(job) => {
-                        // execute job and catch unexpected errors
-                        if catch_unwind(AssertUnwindSafe(job)).is_err() {
-                            error!(id = id, "job panicked, recovering");
-                        }
+                let event = receiver
+                    .lock()
+                    .expect("failed to get event from receiver channel")
+                    .recv();
+                if let Ok(job) = event {
+                    // execute job and catch unexpected errors
+                    if catch_unwind(AssertUnwindSafe(job)).is_err() {
+                        error!(id = id, "job panicked, recovering");
                     }
-                    Err(_) => {
-                        info!(id = id, "shutdown");
-                        break;
-                    }
+                } else {
+                    info!(id = id, "shutdown");
+                    break;
                 }
             }
         });

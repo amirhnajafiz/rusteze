@@ -1,11 +1,11 @@
 // http.rs
 
 use crate::workers::WorkerPool;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::{
     collections::HashMap,
     fs,
-    io::{self, BufReader, ErrorKind, Write, prelude::*},
+    io::{BufReader, Write, prelude::*},
     net::{Shutdown, TcpListener, TcpStream},
     num::NonZeroUsize,
     path::{Path, PathBuf},
@@ -20,7 +20,7 @@ const TEMP_DIR: &str = "templates/";
 // network timeout
 const IO_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// HTTPHandler holds the traffic routing logic.
+/// `HTTPHandler` holds the traffic routing logic.
 pub struct HTTPHandler {
     host: String,
     port: u16,
@@ -52,17 +52,18 @@ impl HTTPHandler {
         info!(host = self.host, port = self.port, "server start");
 
         // create a TCP router, exit if it fails
-        let router = TcpListener::bind((self.host.as_str(), self.port))?;
+        let router = TcpListener::bind((self.host.as_str(), self.port))
+            .with_context(|| format!("{}:{}", self.host.as_str(), self.port))?;
 
         // create a thread pool
-        let pool = WorkerPool::new(NonZeroUsize::new(4).unwrap());
+        let pool = WorkerPool::new(NonZeroUsize::new(4).expect("must be greater than zero"));
 
         // loop over the router for incoming traffic
         for stream in router.incoming() {
             let stream = match stream {
                 Ok(s) => s,
                 Err(error) => {
-                    warn!(error = error.to_string(), "failed to accept connection");
+                    warn!(error = %error, "failed to accept connection");
                     continue;
                 }
             };
@@ -76,7 +77,7 @@ impl HTTPHandler {
         Ok(())
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self, stream))]
     fn handler(&self, mut stream: TcpStream) {
         // a dead client must never be able to block a worker thread indefinitely
         if let Err(err) = stream.set_read_timeout(Some(IO_TIMEOUT)) {
@@ -86,57 +87,8 @@ impl HTTPHandler {
             warn!(error = %err, "failed to set write timeout");
         }
 
-        let result = (|| -> Result<()> {
-            // extract the input connection address
-            let in_addr = stream.peer_addr()?;
-            info!(addr = in_addr.to_string(), "connection established");
-
-            // get the request content
-            let request = {
-                let buffer = BufReader::new(&stream);
-                let mut lines = buffer.lines();
-
-                match lines.next() {
-                    Some(line) => line?,
-                    None => {
-                        return Err(anyhow::Error::new(io::Error::new(
-                            ErrorKind::UnexpectedEof,
-                            "empty request",
-                        )));
-                    }
-                }
-            };
-
-            // this line should print the HTTP request content
-            info!(request = request, "request");
-
-            // routing logic
-            let (status_line, content_path) = match request.as_str() {
-                "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", self.templates["index"].display()),
-                _ => ("HTTP/1.1 404 NOT FOUND", self.templates["404"].display()),
-            };
-
-            // create an HTTP response
-            let content = fs::read_to_string(content_path.to_string())?;
-            let length = content.len();
-            let response = format!(
-                "{status_line}\r\n\
-                Content-Type: text/html; charset=utf-8\r\n\
-                Content-Length: {length}\r\n\
-                Connection: close\r\n\
-                \r\n\
-                {content}"
-            );
-
-            // write into the stream and close it
-            stream.write_all(response.as_bytes())?;
-            stream.flush()?;
-
-            Ok(())
-        })();
-
-        // handle internal errors
-        if let Err(err) = result {
+        // call respond to handle the request
+        if let Err(err) = self.respond(&mut stream) {
             error!(error = %err, "request failed");
             let _ = stream.write_all(
                 b"HTTP/1.1 500 Internal Server Error\r\n\
@@ -149,5 +101,51 @@ impl HTTPHandler {
         if let Err(err) = stream.shutdown(Shutdown::Write) {
             warn!(error = %err, "failed to shutdown connection");
         }
+    }
+
+    #[instrument(skip(self, stream))]
+    fn respond(&self, stream: &mut TcpStream) -> Result<()> {
+        // extract the input connection address
+        let in_addr = stream.peer_addr()?;
+        info!(addr = in_addr.to_string(), "connection established");
+
+        // get the request content
+        let request = {
+            let buffer = BufReader::new(&mut *stream);
+            let mut lines = buffer.lines();
+
+            match lines.next() {
+                Some(line) => line?,
+                None => anyhow::bail!("empty request"),
+            }
+        };
+
+        // this line should print the HTTP request content
+        info!(request = request, "request");
+
+        // routing logic
+        let (status_line, content_path) = match request.as_str() {
+            "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", self.templates["index"].clone()),
+            _ => ("HTTP/1.1 404 NOT FOUND", self.templates["404"].clone()),
+        };
+
+        // create an HTTP response
+        let content = fs::read_to_string(&content_path)
+            .with_context(|| format!("content path: {}", content_path.display()))?;
+        let length = content.len();
+        let response = format!(
+            "{status_line}\r\n\
+            Content-Type: text/html; charset=utf-8\r\n\
+            Content-Length: {length}\r\n\
+            Connection: close\r\n\
+            \r\n\
+            {content}"
+        );
+
+        // write into the stream and close it
+        stream.write_all(response.as_bytes())?;
+        stream.flush()?;
+
+        Ok(())
     }
 }

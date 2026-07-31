@@ -1,7 +1,7 @@
 // main.rs
 
 mod http;
-mod loger;
+mod logger;
 mod workers;
 
 use clap::Parser;
@@ -22,17 +22,17 @@ struct Args {
 
 fn main() {
     // init logger (must keep the guard for file writer)
-    let _guard = loger::init_logger();
+    let _guard = logger::init_logger();
 
     // parse args
     let args = Args::parse();
 
     // create new HTTP handler
-    let hd = http::HTTPHandler::new(args.host, args.port);
-    let hd = Arc::new(hd);
+    let handler = http::HTTPHandler::new(args.host, args.port);
+    let handler = Arc::new(handler);
 
     // start the handler
-    if let Err(err) = hd.listen_and_serve() {
-        error!(error = %err, "failed to set write timeout");
+    if let Err(err) = handler.listen_and_serve() {
+        error!(error = %err, "failed to start the HTTP handler");
     }
 }
