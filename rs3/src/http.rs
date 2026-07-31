@@ -126,8 +126,8 @@ impl HTTPHandler {
             );
 
             // write into the stream and close it
-            stream.write_all(response.as_bytes()).unwrap();
-            stream.flush().unwrap();
+            stream.write_all(response.as_bytes())?;
+            stream.flush()?;
 
             Ok(())
         })();
